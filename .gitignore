@@ -1,0 +1,82 @@
+# ===========================================
+# Environment & Secrets (CRITICAL - Never commit!)
+# ===========================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+token.json
+client_secrets.json
+client_secret_*.json
+youtube_credentials.json
+refined-copilot-*.json
+*-dfc32901758a.json
+
+# ===========================================
+# Python
+# ===========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+ENV/
+
+# ===========================================
+# IDE
+# ===========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ===========================================
+# Output & Generated Files
+# ===========================================
+output/
+output_dev/
+logs/
+*.mp4
+*.mp3
+*.wav
+
+# ===========================================
+# Data & Databases
+# ===========================================
+data/chromadb/
+data/chromadb_dev/
+*.db
+*.sqlite
+
+# ===========================================
+# macOS LaunchAgents (local config)
+# ===========================================
+~/Library/LaunchAgents/
+
+# ===========================================
+# Temporary files
+# ===========================================
+*.tmp
+*.temp
+.cache/

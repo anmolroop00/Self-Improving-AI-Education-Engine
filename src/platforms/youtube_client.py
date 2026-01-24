@@ -1,0 +1,217 @@
+"""YouTube Client wrapper for Data API v3.
+
+Handles:
+- Authentication (OAuth 2.0)
+- Video uploading
+- Analytics retrieval
+"""
+
+import logging
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+from ..config import settings
+from ..rag.schemas import Platform, VideoPerformance
+
+logger = logging.getLogger(__name__)
+
+
+class YouTubeClient:
+    """Client for interacting with YouTube Data API."""
+    
+    SCOPES = [
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+    ]
+    
+    def __init__(self):
+        """Initialize YouTube client."""
+        self._youtube = None
+        self._analytics = None
+        self._authenticate()
+    
+    def _authenticate(self):
+        """Authenticate with YouTube API."""
+        try:
+            creds = None
+            creds_path = Path(settings.youtube_credentials_file)
+            
+            if creds_path.exists():
+                creds = Credentials.from_authorized_user_file(str(creds_path), self.SCOPES)
+            
+            if not creds or not creds.valid:
+                # Need to refresh or login
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    settings.youtube_client_secrets_file,
+                    self.SCOPES
+                )
+                creds = flow.run_local_server(port=0)
+                
+                # Save credentials
+                with open(creds_path, "w") as f:
+                    f.write(creds.to_json())
+            
+            self._youtube = build("youtube", "v3", credentials=creds)
+            self._analytics = build("youtubeAnalytics", "v2", credentials=creds)
+            logger.info("YouTube API authenticated")
+            
+        except Exception as e:
+            logger.error(f"YouTube authentication failed: {e}")
+            # Don't raise here to allow system to run in dry-run mode
+    
+    def upload_video(
+        self,
+        video_path: Path,
+        title: str,
+        description: str,
+        tags: List[str],
+        privacy_status: str = "private",
+    ) -> Optional[str]:
+        """Upload a video to YouTube.
+        
+        Args:
+            video_path: Path to video file
+            title: Video title (max 100 chars)
+            description: Video description
+            tags: List of tags
+            privacy_status: private, public, or unlisted
+            
+        Returns:
+            Video ID if successful, None otherwise
+        """
+        if not self._youtube:
+            logger.warning("YouTube client not authenticated, skipping upload")
+            return None
+            
+        try:
+            logger.info(f"Uploading to YouTube: {title}")
+            
+            body = {
+                "snippet": {
+                    "title": title[:100],  # Max 100 chars
+                    "description": description,
+                    "tags": tags,
+                    "categoryId": "27",  # Education
+                },
+                "status": {
+                    "privacyStatus": privacy_status,
+                    "selfDeclaredMadeForKids": True,  # 5-year-old audience
+                }
+            }
+            
+            media = MediaFileUpload(
+                str(video_path),
+                chunksize=-1, 
+                resumable=True
+            )
+            
+            request = self._youtube.videos().insert(
+                part=",".join(body.keys()),
+                body=body,
+                media_body=media
+            )
+            
+            response = None
+            while response is None:
+                status, response = request.next_chunk()
+                if status:
+                    logger.info(f"Uploaded {int(status.progress() * 100)}%")
+            
+            video_id = response.get("id")
+            logger.info(f"Upload complete! Video ID: {video_id}")
+            return video_id
+            
+        except Exception as e:
+            logger.error(f"YouTube upload failed: {e}")
+            return None
+            
+    def get_video_performance(self, video_id: str) -> Optional[VideoPerformance]:
+        """Get analytics for a specific video.
+        
+        Args:
+            video_id: YouTube video ID
+            
+        Returns:
+            VideoPerformance object or None
+        """
+        if not self._analytics:
+            return None
+            
+        try:
+            # Basic stats from Data API
+            stats_response = self._youtube.videos().list(
+                part="statistics",
+                id=video_id
+            ).execute()
+            
+            if not stats_response.get("items"):
+                return None
+                
+            stats = stats_response["items"][0]["statistics"]
+            
+            # TODO: Add Analytics API call for demographics and watch time
+            # For now returning basic stats
+            
+            perf = VideoPerformance(
+                id=f"yt_{video_id}_{datetime.now().strftime('%Y%m%d')}",
+                lesson_id="todo",  # Needs to be linked by caller
+                platform=Platform.YOUTUBE,
+                platform_video_id=video_id,
+                views=int(stats.get("viewCount", 0)),
+                likes=int(stats.get("likeCount", 0)),
+                comments=int(stats.get("commentCount", 0)),
+                post_time=datetime.now(), # Approximate if unknown
+                post_day_of_week=datetime.now().strftime("%A"),
+            )
+            perf.calculate_engagement_rate()
+            
+            return perf
+            
+        except Exception as e:
+            logger.error(f"Failed to get YouTube stats: {e}")
+            return None
+    
+    def set_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
+        """Set custom thumbnail for a video.
+        
+        Note: Requires verified YouTube account.
+        
+        Args:
+            video_id: YouTube video ID
+            thumbnail_path: Path to thumbnail image (JPEG, PNG, etc.)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._youtube:
+            logger.warning("YouTube client not authenticated, skipping thumbnail")
+            return False
+            
+        try:
+            logger.info(f"Setting thumbnail for video {video_id}")
+            
+            media = MediaFileUpload(
+                str(thumbnail_path),
+                mimetype="image/png",
+                resumable=True
+            )
+            
+            self._youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=media
+            ).execute()
+            
+            logger.info(f"Thumbnail set successfully for {video_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to set thumbnail: {e}")
+            return False
+
