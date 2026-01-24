@@ -1,7 +1,7 @@
 """YouTube Client wrapper for Data API v3.
 
 Handles:
-- Authentication (OAuth 2.0)
+- Authentication (OAuth 2.0) with automatic token refresh
 - Video uploading
 - Analytics retrieval
 """
@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -38,29 +39,58 @@ class YouTubeClient:
         self._authenticate()
     
     def _authenticate(self):
-        """Authenticate with YouTube API."""
+        """Authenticate with YouTube API.
+        
+        Uses stored credentials with automatic refresh. Only opens browser
+        for first-time authorization or if refresh token is revoked.
+        """
         try:
             creds = None
             creds_path = Path(settings.youtube_credentials_file)
             
+            # Try to load existing credentials
             if creds_path.exists():
+                logger.info("Loading existing YouTube credentials...")
                 creds = Credentials.from_authorized_user_file(str(creds_path), self.SCOPES)
             
-            if not creds or not creds.valid:
-                # Need to refresh or login
+            # Check if credentials need refresh or new login
+            if creds and creds.expired and creds.refresh_token:
+                # Token expired but we have refresh token - refresh silently!
+                logger.info("Access token expired, refreshing automatically...")
+                try:
+                    creds.refresh(Request())
+                    logger.info("Token refreshed successfully - no browser needed!")
+                    
+                    # Save refreshed credentials
+                    with open(creds_path, "w") as f:
+                        f.write(creds.to_json())
+                    logger.info("Refreshed credentials saved")
+                    
+                except Exception as refresh_error:
+                    logger.warning(f"Token refresh failed: {refresh_error}")
+                    logger.info("Will need to re-authenticate via browser...")
+                    creds = None  # Force new login
+            
+            elif not creds or not creds.valid:
+                # No valid credentials at all - need browser login
+                logger.info("No valid credentials found, starting OAuth flow...")
                 flow = InstalledAppFlow.from_client_secrets_file(
                     settings.youtube_client_secrets_file,
                     self.SCOPES
                 )
                 creds = flow.run_local_server(port=0)
                 
-                # Save credentials
+                # Save new credentials (includes refresh token)
                 with open(creds_path, "w") as f:
                     f.write(creds.to_json())
+                logger.info("New credentials saved with refresh token")
+            
+            else:
+                logger.info("Using existing valid credentials")
             
             self._youtube = build("youtube", "v3", credentials=creds)
             self._analytics = build("youtubeAnalytics", "v2", credentials=creds)
-            logger.info("YouTube API authenticated")
+            logger.info("YouTube API authenticated successfully")
             
         except Exception as e:
             logger.error(f"YouTube authentication failed: {e}")
