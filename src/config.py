@@ -52,6 +52,7 @@ class FeatureFlags(BaseSettings):
     multi_platform: bool = Field(default=False, description="Enable Instagram/TikTok posting")
     ab_testing: bool = Field(default=False, description="Enable A/B testing for titles")
     email_notifications: bool = Field(default=False, description="Enable email notifications")
+    aria_autonomous: bool = Field(default=False, description="Enable ARIA autonomous mode")
 
 
 class Settings(BaseSettings):
@@ -118,6 +119,13 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = Field(default="INFO")
+    
+    # ARIA - Autonomous Strategist Configuration
+    agent_name: str = Field(default="ARIA", description="AI agent name")
+    subscriber_target: int = Field(default=1000, description="Target subscriber count")
+    target_deadline: str = Field(default="2026-03-24", description="Target date (YYYY-MM-DD)")
+    allow_topic_pivot: bool = Field(default=True, description="Allow AI to change topics")
+    allow_audience_change: bool = Field(default=True, description="Allow AI to change target audience")
     
     # Feature flags instance
     _features: FeatureFlags = None

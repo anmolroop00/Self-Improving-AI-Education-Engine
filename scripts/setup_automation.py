@@ -31,12 +31,16 @@ sys.path.insert(0, str(PROJECT_ROOT))
 LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
 DAILY_PLIST = LAUNCH_AGENTS_DIR / "com.ai-education-engine.daily.plist"
 OPTIMIZATION_PLIST = LAUNCH_AGENTS_DIR / "com.ai-education-engine.optimization.plist"
+WEEKLY_PLIST = LAUNCH_AGENTS_DIR / "com.ai-education-engine.weekly.plist"
 
 # Default schedule - can be overridden by strategy
 DEFAULT_DAILY_HOUR = 10
 DEFAULT_DAILY_MINUTE = 0
 DEFAULT_OPTIMIZATION_HOUR = 18
 DEFAULT_OPTIMIZATION_MINUTE = 0
+DEFAULT_WEEKLY_HOUR = 20  # 8 PM Sunday
+DEFAULT_WEEKLY_MINUTE = 0
+DEFAULT_WEEKLY_DAY = 0    # 0 = Sunday
 
 
 def get_python_path() -> str:
@@ -132,6 +136,56 @@ def create_optimization_plist(hour: int = DEFAULT_OPTIMIZATION_HOUR,
 '''
 
 
+def create_weekly_plist(hour: int = DEFAULT_WEEKLY_HOUR, 
+                        minute: int = DEFAULT_WEEKLY_MINUTE,
+                        weekday: int = DEFAULT_WEEKLY_DAY) -> str:
+    """Create the weekly analysis LaunchAgent plist content.
+    
+    Runs every Sunday for ARIA strategic analysis.
+    """
+    script_path = PROJECT_ROOT / "scripts" / "run_weekly.sh"
+    log_path = PROJECT_ROOT / "logs" / "launchd_weekly.log"
+    error_path = PROJECT_ROOT / "logs" / "launchd_weekly_error.log"
+    
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ai-education-engine.weekly</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{script_path}</string>
+    </array>
+    
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>{weekday}</integer>
+        <key>Hour</key>
+        <integer>{hour}</integer>
+        <key>Minute</key>
+        <integer>{minute}</integer>
+    </dict>
+    
+    <key>WorkingDirectory</key>
+    <string>{PROJECT_ROOT}</string>
+    
+    <key>StandardOutPath</key>
+    <string>{log_path}</string>
+    
+    <key>StandardErrorPath</key>
+    <string>{error_path}</string>
+    
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
+'''
+
+
 def install():
     """Install LaunchAgents."""
     print("🔧 Installing LaunchAgents...")
@@ -170,15 +224,23 @@ def install():
         f.write(opt_content)
     print(f"   ✅ Created {OPTIMIZATION_PLIST.name}")
     
+    # Write weekly analysis plist (ARIA strategic analysis)
+    weekly_content = create_weekly_plist()
+    with open(WEEKLY_PLIST, 'w') as f:
+        f.write(weekly_content)
+    print(f"   ✅ Created {WEEKLY_PLIST.name}")
+    
     # Load the agents
     print("\n📦 Loading LaunchAgents...")
     subprocess.run(['launchctl', 'load', str(DAILY_PLIST)], capture_output=True)
     subprocess.run(['launchctl', 'load', str(OPTIMIZATION_PLIST)], capture_output=True)
+    subprocess.run(['launchctl', 'load', str(WEEKLY_PLIST)], capture_output=True)
     
     print("\n✅ Installation complete!")
     print(f"\n📅 Schedule:")
     print(f"   Daily Pipeline: {daily_hour}:{daily_minute:02d} every day")
     print(f"   Optimization: {DEFAULT_OPTIMIZATION_HOUR}:{DEFAULT_OPTIMIZATION_MINUTE:02d} every day")
+    print(f"   Weekly Analysis: Sundays at {DEFAULT_WEEKLY_HOUR}:{DEFAULT_WEEKLY_MINUTE:02d} (ARIA)")
     print(f"\n💡 Commands:")
     print(f"   Check status: python3 scripts/setup_automation.py status")
     print(f"   View logs:    python3 scripts/setup_automation.py logs")
@@ -199,6 +261,11 @@ def uninstall():
         subprocess.run(['launchctl', 'unload', str(OPTIMIZATION_PLIST)], capture_output=True)
         OPTIMIZATION_PLIST.unlink()
         print(f"   ✅ Removed {OPTIMIZATION_PLIST.name}")
+    
+    if WEEKLY_PLIST.exists():
+        subprocess.run(['launchctl', 'unload', str(WEEKLY_PLIST)], capture_output=True)
+        WEEKLY_PLIST.unlink()
+        print(f"   ✅ Removed {WEEKLY_PLIST.name}")
     
     print("\n✅ Uninstallation complete!")
 
