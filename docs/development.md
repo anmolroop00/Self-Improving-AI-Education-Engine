@@ -200,3 +200,30 @@ os.environ["ENV_MODE"] = "development"  # BEFORE import
 
 from src.config import settings  # AFTER setting
 ```
+
+### Google Cloud / Vertex AI Errors
+
+```bash
+# Ensure service account credentials are set
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+
+# Or set in .env:
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+GOOGLE_CLOUD_PROJECT=your-project-id
+```
+
+### Instagram Token Expired
+
+Token expires in ~60 days. To refresh:
+1. Go to Graph API Explorer
+2. Generate new token with required permissions
+3. Update `INSTAGRAM_ACCESS_TOKEN` in `.env`
+
+### YouTube Analytics Not Working
+
+Ensure `yt-analytics.readonly` scope is granted:
+```bash
+# Delete credentials and re-authenticate
+rm youtube_credentials.json
+python3 scripts/run_weekly_analysis.py
+```

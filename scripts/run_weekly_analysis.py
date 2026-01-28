@@ -24,6 +24,7 @@ sys.path.insert(0, str(project_root))
 
 from src.config import settings
 from src.rag.memory_store import MemoryStore
+from src.rag.schemas import TopicPlan, ScriptStyle
 from src.agents.strategic_brain import get_strategic_brain
 from src.agents.agent_persona import ARIA
 from src.services.growth_tracker import get_growth_tracker
@@ -40,6 +41,66 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+def apply_strategic_changes(memory: MemoryStore, analysis) -> bool:
+    """Apply strategic changes from analysis to RAG memory.
+    
+    Args:
+        memory: Memory store
+        analysis: WeeklyStrategicAnalysis from Strategic Brain
+        
+    Returns:
+        True if changes were applied
+    """
+    changes_made = False
+    
+    # Handle topic pivot
+    if analysis.topic_decision.should_pivot:
+        logger.info(f"📝 Applying topic pivot: {analysis.topic_decision.recommended_topic}")
+        # Create new topic plan for the recommended topic
+        new_plan = TopicPlan(
+            main_topic=analysis.topic_decision.recommended_topic,
+            target_audience="5-year-old",  # Default or from audience_decision
+            total_lessons=10,
+            lesson_titles=[],  # Will be populated by curriculum planner
+        )
+        memory.save_topic_plan(new_plan)
+        changes_made = True
+        logger.info(f"   New topic plan created: {new_plan.id}")
+    
+    # Handle audience change
+    if analysis.audience_decision.should_change:
+        logger.info(f"👥 Audience change recommended: {analysis.audience_decision.recommended_audience}")
+        # For now, log it - audience is typically part of topic plan
+        changes_made = True
+    
+    # Handle content style update
+    if analysis.content_style.recommended_style:
+        logger.info(f"🎨 Updating content style: {analysis.content_style.recommended_style}")
+        current_strategy = memory.get_active_strategy()
+        if current_strategy:
+            # Map recommended style to ScriptStyle enum
+            style_map = {
+                "story": ScriptStyle.STORY,
+                "tutorial": ScriptStyle.TUTORIAL,
+                "exploration": ScriptStyle.EXPLORATION,
+            }
+            recommended = analysis.content_style.recommended_style.lower()
+            new_style = style_map.get(recommended, current_strategy.current_script_style)
+            if new_style != current_strategy.current_script_style:
+                current_strategy.current_script_style = new_style
+                memory.save_strategy(current_strategy)
+                changes_made = True
+                logger.info(f"   Script style updated to: {new_style.value}")
+    
+    # Log strategic actions for tracking
+    if analysis.strategic_actions:
+        logger.info(f"📋 {len(analysis.strategic_actions)} strategic actions identified:")
+        for action in analysis.strategic_actions[:3]:  # Log top 3
+            logger.info(f"   P{action.priority}: {action.description}")
+    
+    return changes_made
 
 
 def get_week_performance(memory: MemoryStore, youtube: YouTubeClient) -> dict:
@@ -117,14 +178,16 @@ def get_week_performance(memory: MemoryStore, youtube: YouTubeClient) -> dict:
 def get_current_subscriber_count(youtube: YouTubeClient) -> int:
     """Get current subscriber count from YouTube.
     
-    Note: This requires YouTube Analytics API access.
-    Falls back to estimation if not available.
+    Uses the YouTube Data API channels.list endpoint.
     """
-    # TODO: Implement actual subscriber count retrieval
-    # For now, this would need channel analytics access
-    # Returning placeholder - user should update manually or via API
-    logger.warning("Subscriber count retrieval not yet implemented - using placeholder")
-    return 0
+    try:
+        channel_stats = youtube.get_channel_stats()
+        count = channel_stats.get("subscribers", 0)
+        logger.info(f"Current subscriber count: {count}")
+        return count
+    except Exception as e:
+        logger.warning(f"Failed to get subscriber count: {e}")
+        return 0
 
 
 def send_weekly_report_email(
@@ -398,8 +461,9 @@ def main():
         logger.info(f"   Audience change: {'YES' if analysis.audience_decision.should_change else 'NO'}")
         logger.info(f"   Confidence: {analysis.confidence_in_hitting_target:.0%}")
         
-        # 7. Apply strategic changes if any TODO: implement
-        # This would update the RAG with new strategy settings
+        # 7. Apply strategic changes if any
+        if apply_strategic_changes(memory, analysis):
+            logger.info("✅ Strategic changes applied to memory")
         
         # 8. Send weekly report email
         growth_report = tracker.generate_progress_report()

@@ -244,4 +244,95 @@ class YouTubeClient:
         except Exception as e:
             logger.error(f"Failed to set thumbnail: {e}")
             return False
+    
+    def get_channel_stats(self) -> Dict:
+        """Get channel statistics including subscriber count.
+        
+        Returns:
+            Dict with subscribers, total_views, video_count
+        """
+        if not self._youtube:
+            logger.warning("YouTube client not authenticated")
+            return {"subscribers": 0, "total_views": 0, "video_count": 0}
+        
+        try:
+            response = self._youtube.channels().list(
+                part="statistics",
+                mine=True
+            ).execute()
+            
+            if response.get("items"):
+                stats = response["items"][0]["statistics"]
+                result = {
+                    "subscribers": int(stats.get("subscriberCount", 0)),
+                    "total_views": int(stats.get("viewCount", 0)),
+                    "video_count": int(stats.get("videoCount", 0)),
+                    "hidden_subscriber_count": stats.get("hiddenSubscriberCount", False),
+                }
+                logger.info(f"Channel stats: {result['subscribers']} subscribers")
+                return result
+                
+            return {"subscribers": 0, "total_views": 0, "video_count": 0}
+            
+        except Exception as e:
+            logger.error(f"Failed to get channel stats: {e}")
+            return {"subscribers": 0, "total_views": 0, "video_count": 0}
+    
+    def get_video_analytics(self, video_id: str, days: int = 28) -> Dict:
+        """Get detailed analytics for a video using YouTube Analytics API.
+        
+        Args:
+            video_id: YouTube video ID
+            days: Number of days to look back (default 28)
+            
+        Returns:
+            Dict with watch_time, avg_view_duration, avg_view_percentage, demographics
+        """
+        if not self._analytics:
+            logger.warning("YouTube Analytics not available")
+            return {}
+        
+        try:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            
+            # Watch time and retention metrics
+            response = self._analytics.reports().query(
+                ids="channel==MINE",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
+                filters=f"video=={video_id}",
+            ).execute()
+            
+            rows = response.get("rows", [[0, 0, 0]])
+            watch_data = rows[0] if rows else [0, 0, 0]
+            
+            result = {
+                "watch_time_minutes": watch_data[0] if len(watch_data) > 0 else 0,
+                "avg_view_duration_seconds": watch_data[1] if len(watch_data) > 1 else 0,
+                "avg_view_percentage": watch_data[2] if len(watch_data) > 2 else 0,
+            }
+            
+            # Demographics (ageGroup, gender) - separate query
+            try:
+                demo_response = self._analytics.reports().query(
+                    ids="channel==MINE",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views",
+                    dimensions="ageGroup,gender",
+                    filters=f"video=={video_id}",
+                ).execute()
+                result["demographics"] = demo_response.get("rows", [])
+            except Exception as demo_error:
+                logger.debug(f"Demographics not available: {demo_error}")
+                result["demographics"] = []
+            
+            logger.info(f"Video {video_id} analytics: {result['watch_time_minutes']:.1f} min watched")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get video analytics: {e}")
+            return {}
 

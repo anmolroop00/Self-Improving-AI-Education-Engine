@@ -95,6 +95,8 @@ class MemoryStore:
     def save_lesson(self, lesson: LessonContent) -> str
     def get_performance_history(self, platform, limit) -> List[VideoPerformance]
     def update_topic_progress(self, plan_id: str) -> None
+    def get_active_strategy(self) -> ContentStrategy
+    def save_strategy(self, strategy: ContentStrategy) -> str
 ```
 
 ### Configuration (src/config.py)
@@ -170,9 +172,12 @@ class ContentStrategy:
 | Service | Purpose | Module |
 |---------|---------|--------|
 | Gemini 2.0 Flash | Script generation, analysis | agents/*.py |
+| Vertex AI | Gemini/Veo authentication | config.py (vertexai=True) |
 | Veo 3 | Video clip generation | production/video_generator.py |
 | ElevenLabs | Text-to-speech | production/tts_service.py |
 | YouTube API v3 | Upload, analytics | platforms/youtube_client.py |
+| YouTube Analytics API | Watch time, demographics | platforms/youtube_client.py |
+| Instagram Graph API | Reels, insights | platforms/instagram_client.py |
 | ChromaDB | Vector storage | rag/memory_store.py |
 
 ## Environment Separation

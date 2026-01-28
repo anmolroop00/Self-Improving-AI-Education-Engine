@@ -40,12 +40,14 @@ python3 scripts/run_dev.py
 │   │   └── schemas.py       # Data models (Pydantic)
 │   │
 │   ├── platforms/           # Social Media APIs
-│   │   └── youtube_client.py
+│   │   ├── youtube_client.py   # YouTube upload & analytics
+│   │   └── instagram_client.py # Instagram Graph API
 │   │
 │   └── config.py            # Configuration management
 │
 ├── scripts/                 # Automation scripts
 │   ├── run_daily.py         # Production daily runner
+│   ├── run_weekly_analysis.py # Weekly strategic analysis
 │   ├── run_optimization.py  # Analytics & optimization
 │   ├── run_dev.py           # Development testing
 │   ├── setup_automation.py  # LaunchAgent installer
@@ -74,6 +76,11 @@ ELEVENLABS_VOICE_ID=xxx
 # Feature Flags
 FEATURE_THUMBNAILS=false
 FEATURE_CAPTIONS=false
+FEATURE_ARIA_AUTONOMOUS=true  # Enable ARIA weekly analysis
+
+# Instagram Graph API
+INSTAGRAM_ACCESS_TOKEN=EAAR...
+INSTAGRAM_USER_ID=17841...
 ```
 
 ### Key Settings
@@ -215,9 +222,12 @@ python3 scripts/setup_automation.py start
 
 ## 🔑 API Keys Required
 
-1. **Google Cloud** - Gemini AI, Veo 3, Cloud TTS
-2. **ElevenLabs** - High-quality TTS
-3. **YouTube** - Video upload and analytics
+| Service | Purpose | Setup |
+|---------|---------|-------|
+| **Google Cloud** | Gemini AI, Veo 3, Cloud TTS | Service account + Vertex AI |
+| **ElevenLabs** | High-quality TTS | API key |
+| **YouTube** | Video upload and analytics | OAuth 2.0 credentials |
+| **Instagram** | Reels publishing & analytics | Facebook Graph API token |
 
 ## 📝 Common Tasks
 
